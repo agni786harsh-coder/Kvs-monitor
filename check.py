@@ -24,7 +24,7 @@ def check_website():
     Returns:
         True: maintenance detected
         False: maintenance not detected
-        None: request failed (network error OR bad HTTP status)
+        None: request failed or returned an unusable response
     """
 
     try:
@@ -36,19 +36,27 @@ def check_website():
             },
         )
 
-        # Treat non-2xx responses (500, 502, 503, etc.) as a failed
-        # request rather than as "available", since an error page
-        # will not contain the maintenance text and would otherwise
-        # be misread as the site being up.
-        response.raise_for_status()
-
         page = response.text.lower()
 
-        # Only the explicit maintenance text is treated as maintenance.
+        # Check the actual page content before interpreting
+        # the HTTP status code. Many sites serve their maintenance
+        # page with a non-2xx status (e.g. 503), so the content
+        # check must come first or a real maintenance window would
+        # be misread as "request failed".
         if "under maintenance" in page:
             return True
 
-        return False
+        # A normal successful response without the maintenance
+        # message means the page is available.
+        if 200 <= response.status_code < 300:
+            return False
+
+        # Do not interpret an error page as "available".
+        print(
+            f"Unusable HTTP status: {response.status_code}. "
+            "Previous state will be preserved."
+        )
+        return None
 
     except requests.RequestException as error:
         print(f"Website request failed: {error}")
@@ -172,4 +180,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-  
